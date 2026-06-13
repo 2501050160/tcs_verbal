@@ -72,8 +72,8 @@ export default function App() {
   const [adminPasswordError, setAdminPasswordError] = useState<string>('');
   
   // Student Context
-  const [studentName, setStudentName] = useState<string>('Praveen Kumar');
-  const [studentId, setStudentId] = useState<string>('CSE-2026-8891');
+  const [studentName, setStudentName] = useState<string>('Sai Praveen ');
+  const [studentId, setStudentId] = useState<string>('2501050160');
   
   // Admin Configurations (Customizable values)
   const [sentenceTimeLimit, setSentenceTimeLimit] = useState<number>(25); // 25 seconds per blank
@@ -744,11 +744,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg md:text-xl font-display font-bold tracking-tight text-white">
-                  IntelliTest Verbal Platform
+                  TCS Verbal Practice
                 </h1>
                 <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">TCS NQT STAGE</span>
               </div>
-              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator</p>
+              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Developed by Sai Praveen CSE M-tech</p>
             </div>
           </div>
 
