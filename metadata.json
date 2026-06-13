@@ -1,0 +1,6 @@
+{
+  "name": "IntelliTest Verbal Prep Platform",
+  "description": "An interactive prep platform for TCS Verbal Ability showcasing sentence completion timers, passage recall evaluations, and full-stack AI essay/email analysis by Praveen (MTech CSE).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
