@@ -746,9 +746,9 @@ export default function App() {
                 <h1 className="text-lg md:text-xl font-display font-bold tracking-tight text-white">
                   TCS Verbal Practice
                 </h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">TCS NQT STAGE</span>
+                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">Developed by SAI PRAVEEN</span>
               </div>
-              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Developed by Sai Praveen CSE M-tech</p>
+              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5"></p>
             </div>
           </div>
 
