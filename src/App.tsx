@@ -74,6 +74,30 @@ export default function App() {
   // Student Context
   const [studentName, setStudentName] = useState<string>('Sai Praveen ');
   const [studentId, setStudentId] = useState<string>('2501050160');
+
+  // Load blocked students list from localStorage
+  const [blockedStudents, setBlockedStudents] = useState<string[]>(() => {
+    const raw = localStorage.getItem('intellitest_blocked_students');
+    return raw ? JSON.parse(raw) : [];
+  });
+
+  const [isExamBlockedCurrentSession, setIsExamBlockedCurrentSession] = useState<boolean>(false);
+
+  const blockStudent = (id: string) => {
+    setBlockedStudents((prev) => {
+      const updated = prev.includes(id) ? prev : [...prev, id];
+      localStorage.setItem('intellitest_blocked_students', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const unblockStudent = (id: string) => {
+    setBlockedStudents((prev) => {
+      const updated = prev.filter((item) => item !== id);
+      localStorage.setItem('intellitest_blocked_students', JSON.stringify(updated));
+      return updated;
+    });
+  };
   
   // Admin Configurations (Customizable values)
   const [sentenceTimeLimit, setSentenceTimeLimit] = useState<number>(25); // 25 seconds per blank
@@ -119,6 +143,100 @@ export default function App() {
     }, 1000);
     return () => clearInterval(t);
   }, []);
+
+  const enterFullScreen = () => {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch((err) => {
+        console.warn("Fullscreen request rejected", err);
+      });
+    } else if ((elem as any).webkitRequestFullscreen) { /* Safari */
+      (elem as any).webkitRequestFullscreen();
+    } else if ((elem as any).msRequestFullscreen) { /* IE11 */
+      (elem as any).msRequestFullscreen();
+    }
+  };
+
+  const exitFullScreen = () => {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if ((document as any).webkitExitFullscreen) {
+      (document as any).webkitExitFullscreen();
+    } else if ((document as any).msExitFullscreen) {
+      (document as any).msExitFullscreen();
+    }
+  };
+
+  // Monitor proctoring locks & focus breaches during active test periods
+  useEffect(() => {
+    const isProctoringActive = 
+      currentView === 'taking_test' && 
+      currentSection !== 'briefing' && 
+      currentSection !== 'grading' &&
+      !isExamBlockedCurrentSession;
+
+    if (!isProctoringActive) return;
+
+    const handleViolation = (reason: string) => {
+      console.warn("Strict Proctoring Lock Breached:", reason);
+      
+      // Stop timer updates
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+
+      // Add student ID to active blocked registry
+      const targetId = studentId.trim();
+      setBlockedStudents((prev) => {
+        if (!prev.includes(targetId)) {
+          const updated = [...prev, targetId];
+          localStorage.setItem('intellitest_blocked_students', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+
+      // Exit fullscreen safely
+      exitFullScreen();
+
+      // Trigger session breach lock block page
+      setIsExamBlockedCurrentSession(true);
+    };
+
+    // Callback on fullscreen state exit transitions
+    const handleFullscreenChange = () => {
+      // If full screen is exited but proctoring is still marked active, it is a breach!
+      if (!document.fullscreenElement && !isExamBlockedCurrentSession) {
+        handleViolation("Exited locked Fullscreen mode");
+      }
+    };
+
+    // Callback on tab/window switching hidden
+    const handleVisibilityChange = () => {
+      if ((document.hidden || document.visibilityState === 'hidden') && !isExamBlockedCurrentSession) {
+        handleViolation("Tab/Window Switched or Minimized");
+      }
+    };
+
+    // Callback on window blur
+    const handleWindowBlur = () => {
+      if (!isExamBlockedCurrentSession) {
+        handleViolation("Window lost system active focus");
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [currentView, currentSection, studentId, isExamBlockedCurrentSession]);
   
   // Initialize Mock Peer Data on first load
   useEffect(() => {
@@ -346,6 +464,12 @@ export default function App() {
   const startExam = (test: PracticeTest) => {
     if (!studentName.trim() || !studentId.trim()) {
       alert("Please enter both Candidate Name and Student ID credentials in the panel first.");
+      return;
+    }
+
+    // Check if the student ID is blocked due to a proctoring violation
+    if (blockedStudents.includes(studentId.trim())) {
+      alert(`Access Strictly Blocked: Candidate registration ID ${studentId} is barred due to an active proctoring violation (exiting fullscreen or tab/window change). An administrator must clear the lock from the system admin panel.`);
       return;
     }
     
@@ -744,11 +868,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg md:text-xl font-display font-bold tracking-tight text-white">
-                  TCS Verbal Practice
+                  IntelliTest Verbal Platform
                 </h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">Developed by SAI PRAVEEN</span>
+                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">TCS NQT STAGE</span>
               </div>
-              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5"></p>
+              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator</p>
             </div>
           </div>
 
@@ -982,8 +1106,62 @@ export default function App() {
         )}
 
         {/* VIEW 2: TAKING THE TEST */}
-        {currentView === 'taking_test' && (
-          <main className="flex-1 bg-[#0b0e22]/90 border border-[#1b2247] rounded-2xl p-6 md:p-8 flex flex-col shadow-inner relative justify-between gap-6 min-h-[500px]">
+        {currentView === 'taking_test' && (isExamBlockedCurrentSession || blockedStudents.includes(studentId.trim())) ? (
+          <main className="flex-1 bg-red-950/20 border border-red-500/30 rounded-2xl p-6 md:p-8 flex flex-col shadow-inner relative justify-center items-center text-center gap-6 min-h-[500px] backdrop-blur-md">
+            <div className="absolute inset-0 z-0 bg-[#060814]/80 rounded-2xl pointer-events-none"></div>
+            <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
+            
+            <div className="relative z-10 w-16 h-16 bg-red-500/10 border border-red-500/40 rounded-2xl flex items-center justify-center text-red-500 shadow-xl shadow-red-500/10 animate-pulse">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="relative z-10 max-w-xl space-y-3">
+              <h2 className="text-2xl font-display font-black tracking-tight text-red-400">SECURITY PROTOCOL VIOLATION</h2>
+              <p className="text-sm text-slate-200 font-bold uppercase tracking-wider font-mono">Exam Session Terminated &amp; Restricted</p>
+              <div className="bg-[#05060d]/90 border border-red-500/20 rounded-xl p-5 text-xs text-slate-300 text-left space-y-3.5 leading-relaxed font-sans mt-4">
+                <p>
+                  <b>Violation Identifier:</b> <span className="font-mono bg-red-500/10 text-red-300 px-1.5 py-0.5 rounded font-bold">SYSTEM_PROCTOR_EVENT</span>
+                </p>
+                <p>
+                  <b>Registered Candidate ID:</b> <span className="font-mono text-white font-bold">{studentId}</span>
+                </p>
+                <p>
+                  <b>Candidate Name:</b> <span className="text-white font-bold">{studentName}</span>
+                </p>
+                <hr className="border-red-500/20" />
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  During an active assessment lock, the system detected a proctoring event threshold breach. This corresponds to either <b>exiting full screen mode</b>, <b>changing browser tabs</b>, or <b>losing window focus (blur)</b>.
+                </p>
+                <p className="text-[11px] text-red-400 font-semibold italic">
+                  To discourage academic dishonesty, you are blocked from writing or starting this exam again on this account/system.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative z-10 flex gap-3 mt-2">
+              <button
+                id="btn-violation-return"
+                onClick={() => {
+                  setIsExamBlockedCurrentSession(false);
+                  setCurrentView('landing');
+                }}
+                className="px-5 py-2.5 bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer"
+              >
+                Return to Dashboard
+              </button>
+              <button
+                id="btn-violation-contact-admin"
+                onClick={() => {
+                  setCurrentView('admin');
+                }}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer"
+              >
+                Go to Admin Portal
+              </button>
+            </div>
+          </main>
+        ) : currentView === 'taking_test' && (
+          <main className="flex-1 bg-[#0b0e22]/90 border border-[#1b2247] rounded-xl p-6 md:p-8 flex flex-col shadow-inner relative justify-between gap-6 min-h-[500px]">
             
             {/* Countdown indicators / Header inside test */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#1b2247]/60 pb-4 gap-3">
@@ -1044,6 +1222,7 @@ export default function App() {
                     onClick={() => {
                       setCurrentSection('sentence');
                       setGlobalTimer(sentenceTimeLimit);
+                      enterFullScreen();
                     }}
                     className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
                   >
@@ -1730,6 +1909,45 @@ export default function App() {
                     Timers are saved within state context instantly. Adjusting constraints represents rapid debugging.
                   </p>
                 </div>
+              </div>
+
+              {/* Proctoring Lock Registry card */}
+              <div className="bg-[#0b0e22]/90 border border-[#1b2247] rounded-2xl p-6 shadow-xl backdrop-blur-xl flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-[#1b2247]/60 pb-2">
+                  <ShieldAlert className="w-4 h-4 text-red-400 animate-pulse" />
+                  <h3 className="text-xs font-bold text-red-300 uppercase tracking-widest font-display font-bold">Proctoring Lock Registry</h3>
+                </div>
+
+                {blockedStudents.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 italic text-center py-4">
+                    No active candidate ID blocks resolved or registered right now.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                    {blockedStudents.map((blockedId) => (
+                      <div key={blockedId} className="flex justify-between items-center bg-[#05060d] border border-red-500/20 rounded-lg p-3 text-xs">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs font-bold text-red-300">{blockedId}</span>
+                          <span className="text-[9px] text-slate-500">Status: Locked session</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            unblockStudent(blockedId);
+                            setIsExamBlockedCurrentSession(false);
+                            alert(`Admin Authorization: Candidate registration ID ${blockedId} proctor unlock successfully committed. Exam rights restored.`);
+                          }}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] px-2.5 py-1.5 rounded font-bold transition-all uppercase cursor-pointer"
+                        >
+                          Unblock Candidate
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <p className="text-[9px] text-slate-500 leading-relaxed font-sans mt-1">
+                  * Admin actions instantly de-restrict candidate access tokens allowing brand new testing trials.
+                </p>
               </div>
 
             </div>
