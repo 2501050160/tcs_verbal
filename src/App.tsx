@@ -868,11 +868,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg md:text-xl font-display font-bold tracking-tight text-white">
-                  IntelliTest Verbal Platform
+                  TCS Verbal Platform
                 </h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">TCS NQT STAGE</span>
+                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">By Praveen </span>
               </div>
-              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator</p>
+              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator for TCS</p>
             </div>
           </div>
 
@@ -1092,7 +1092,7 @@ export default function App() {
                 <div className="w-10 h-10 bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full flex items-center justify-center mx-auto mb-2.5">
                   <Award size={18} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6366f1] mb-1">Architect & Developer Spotlight</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6366f1] mb-1">Developer by</p>
                 <h3 className="text-xl font-display font-bold text-white mb-0.5">Praveen</h3>
                 <p className="text-xs text-slate-400">MTech Computer Science &amp; Engineering</p>
                 <p className="text-[11px] text-indigo-300 font-serif italic mt-2">"Benchmarking system timings for highest verbal performance"</p>
