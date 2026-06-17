@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper to validate standard alphanumeric IDs (permits dashes and spaces for ID safety)
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_ \\-]+$');
+    }
+
+    // Helpers for request data
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Submission entity validation helper
+    function isValidSubmission(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.studentName is string && data.studentName.size() <= 200
+          && data.studentId is string && data.studentId.size() <= 100
+          && data.testId is int
+          && data.testTitle is string && data.testTitle.size() <= 300
+          && data.totalScore is int
+          && data.percentage is number;
+    }
+
+    // Blocked Student validation helper
+    function isValidBlockedStudent(data) {
+      return data.studentId is string && data.studentId.size() <= 100
+          && data.blocked is bool;
+    }
+
+    // Matches for submissions collection
+    match /submissions/{submissionId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isValidId(submissionId) && isValidSubmission(incoming());
+      allow update: if false; // Immutable audit logs
+      allow delete: if true;  // Allowed for admin purging or candidate resets
+    }
+
+    // Matches for blocked students collection
+    match /blocked_students/{studentId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if isValidId(studentId) && isValidBlockedStudent(incoming());
+      allow delete: if true;  // Allowed on unblocking
+    }
+  }
+}

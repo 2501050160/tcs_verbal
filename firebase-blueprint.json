@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "SubmissionRecord": {
+      "title": "SubmissionRecord",
+      "description": "Candidate evaluation results",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "testId": { "type": "integer" },
+        "testTitle": { "type": "string" },
+        "date": { "type": "string" },
+        "sentenceScore": { "type": "integer" },
+        "passageScore": { "type": "integer" },
+        "emailScore": { "type": "integer" },
+        "totalScore": { "type": "integer" },
+        "percentage": { "type": "number" },
+        "grade": { "type": "string" }
+      },
+      "required": ["id", "studentName", "studentId", "testId", "totalScore", "percentage"]
+    },
+    "BlockedStudent": {
+      "title": "BlockedStudent",
+      "description": "Candidate proctoring status blocker",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "blocked": { "type": "boolean" },
+        "blockedAt": { "type": "string" }
+      },
+      "required": ["studentId", "blocked"]
+    }
+  },
+  "firestore": {
+    "/submissions/{submissionId}": {
+      "schema": "SubmissionRecord",
+      "description": "Results scored by students"
+    },
+    "/blocked_students/{studentId}": {
+      "schema": "BlockedStudent",
+      "description": "Registry of students who broke proctoring protocols"
+    }
+  }
+}

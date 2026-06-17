@@ -172,7 +172,7 @@ if (!isProd) {
   app.use('*', async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+      let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
       template = await vite.transformIndexHtml(url, template);
       res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
     } catch (e) {
@@ -182,9 +182,10 @@ if (!isProd) {
   });
 } else {
   // Server static build files
-  app.use(express.static(path.resolve(__dirname, 'dist')));
+  const distPath = path.resolve(process.cwd(), 'dist');
+  app.use(express.static(distPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+    res.sendFile(path.resolve(distPath, 'index.html'));
   });
 }
 
