@@ -1,4 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { db, handleFirestoreError, OperationType } from './firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  deleteDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
 import { 
   Sparkles, 
   History, 
@@ -58,6 +68,8 @@ interface SubmissionRecord {
   };
   sentenceAnswers: Record<number, string>;
   sentenceGrading: boolean[];
+  passageAnswers?: string[];
+  emailAnswer?: string;
   // AI summary fields (if loaded from server)
   keyVerbalStrengths?: string;
   criticalImprovements?: string;
@@ -72,10 +84,10 @@ export default function App() {
   const [adminPasswordError, setAdminPasswordError] = useState<string>('');
   
   // Student Context
-  const [studentName, setStudentName] = useState<string>('Sai Praveen ');
-  const [studentId, setStudentId] = useState<string>('2501050160');
+  const [studentName, setStudentName] = useState<string>('');
+  const [studentId, setStudentId] = useState<string>('');
 
-  // Load blocked students list from localStorage
+  // Load blocked students list from localStorage & live Firestore
   const [blockedStudents, setBlockedStudents] = useState<string[]>(() => {
     const raw = localStorage.getItem('intellitest_blocked_students');
     return raw ? JSON.parse(raw) : [];
@@ -83,20 +95,48 @@ export default function App() {
 
   const [isExamBlockedCurrentSession, setIsExamBlockedCurrentSession] = useState<boolean>(false);
 
-  const blockStudent = (id: string) => {
+  const blockStudent = async (id: string) => {
+    const targetId = id.trim();
+    if (!targetId) return;
+
     setBlockedStudents((prev) => {
-      const updated = prev.includes(id) ? prev : [...prev, id];
+      const updated = prev.includes(targetId) ? prev : [...prev, targetId];
       localStorage.setItem('intellitest_blocked_students', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await setDoc(doc(db, 'blocked_students', targetId), {
+        studentId: targetId,
+        blocked: true,
+        blockedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to sync block to Firestore:", error);
+      try {
+        handleFirestoreError(error, OperationType.WRITE, `blocked_students/${targetId}`);
+      } catch (e) {}
+    }
   };
 
-  const unblockStudent = (id: string) => {
+  const unblockStudent = async (id: string) => {
+    const targetId = id.trim();
+    if (!targetId) return;
+
     setBlockedStudents((prev) => {
-      const updated = prev.filter((item) => item !== id);
+      const updated = prev.filter((item) => item !== targetId);
       localStorage.setItem('intellitest_blocked_students', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await deleteDoc(doc(db, 'blocked_students', targetId));
+    } catch (error) {
+      console.error("Failed to sync unblock to Firestore:", error);
+      try {
+        handleFirestoreError(error, OperationType.DELETE, `blocked_students/${targetId}`);
+      } catch (e) {}
+    }
   };
   
   // Admin Configurations (Customizable values)
@@ -238,116 +278,170 @@ export default function App() {
     };
   }, [currentView, currentSection, studentId, isExamBlockedCurrentSession]);
   
-  // Initialize Mock Peer Data on first load
+  // Initialize and Sync Submissions & Blocked Students in real-time from Firestore
   useEffect(() => {
-    const rawSubmissions = localStorage.getItem('intellitest_submissions');
-    if (rawSubmissions) {
-      setAllSubmissions(JSON.parse(rawSubmissions));
-    } else {
-      // Default high-fidelity cohort mock datasets for beautiful calculations and peers comparison
-      const initialCohorts: SubmissionRecord[] = [
-        {
-          id: "STU-2026-042",
-          studentName: "Aniket Sharma",
-          studentId: "CSE-2025-1042",
-          testId: 1,
-          testTitle: "TCS Verbal Ability Practice – Set 1",
-          date: "11 Jun 2026",
-          sentenceScore: 16,
-          passageScore: 28,
-          emailScore: 14,
-          totalScore: 58,
-          percentage: 72.5,
-          grade: "First Class",
-          sentenceAnswers: {},
-          sentenceGrading: [],
-          passageAnalysis: [
-            { score: 7, retentionScore: 4, grammarScore: 3, feedback: "Great effort in capturing the business flexibility benefit.", improvements: ["Incorporate secure remote elements"] },
-            { score: 8, retentionScore: 5, grammarScore: 3, feedback: "Captured confidence and interpersonal values correctly.", improvements: ["Add worker retention details"] },
-            { score: 6, retentionScore: 3, grammarScore: 3, feedback: "Understood solar and wind energy naturally.", improvements: ["Discuss long-term energy security"] },
-            { score: 7, retentionScore: 4, grammarScore: 3, feedback: "Highlights mutual trust is essential context.", improvements: ["State innovative problem solving concepts"] }
-          ],
-          emailAnalysis: { score: 14, relevanceScore: 4, toneScore: 3, vocabularyScore: 4, structureScore: 3, feedback: "Formally sound structure with standard greetings. Add registration numbers clearly for maximum compliance in candidate tracking.", improvements: ["Incorporate detailed roll numbers", "Avoid contractions like 'can't'"] }
-        },
-        {
-          id: "STU-2026-105",
-          studentName: "Ananya Rao",
-          studentId: "CSE-2025-1105",
-          testId: 1,
-          testTitle: "TCS Verbal Ability Practice – Set 1",
-          date: "12 Jun 2026",
-          sentenceScore: 18,
-          passageScore: 34,
-          emailScore: 17,
-          totalScore: 69,
-          percentage: 86.25,
-          grade: "Distinction",
-          sentenceAnswers: {},
-          sentenceGrading: [],
-          passageAnalysis: [
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Excellent keyword precision. Outlined secure online platforms.", improvements: [] },
-            { score: 8, retentionScore: 5, grammarScore: 3, feedback: "Strong focus on worker training benefits.", improvements: ["Integrate retention rates"] },
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Outstanding focus on eco balance and low pollution.", improvements: [] },
-            { score: 8, retentionScore: 4, grammarScore: 4, feedback: "Solid context on trust and shared collaboration.", improvements: [] }
-          ],
-          emailAnalysis: { score: 17, relevanceScore: 5, toneScore: 4, vocabularyScore: 4, structureScore: 4, feedback: "Highly precise. Perfectly formatted subject. Addressed the coordinator using professional honorifics and provided clear context.", improvements: ["Vary standard transitions for smoother sentence rhythm"] }
-        },
-        {
-          id: "STU-2026-302",
-          studentName: "Karthik Subramanian",
-          studentId: "CSE-2025-1302",
-          testId: 1,
-          testTitle: "TCS Verbal Ability Practice – Set 1",
-          date: "12 Jun 2026",
-          sentenceScore: 11,
-          passageScore: 22,
-          emailScore: 11,
-          totalScore: 44,
-          percentage: 55.0,
-          grade: "Second Class",
-          sentenceAnswers: {},
-          sentenceGrading: [],
-          passageAnalysis: [
-            { score: 5, retentionScore: 3, grammarScore: 2, feedback: "Grammatically correct but extremely brief recall.", improvements: ["Include company cost reduction"] },
-            { score: 6, retentionScore: 4, grammarScore: 2, feedback: "Understood skill building benefits. Omitted key stats.", improvements: ["Explain organizational motivation results"] },
-            { score: 5, retentionScore: 3, grammarScore: 2, feedback: "Partially represented solar and environmental balance.", improvements: ["State fossil fuels alternative contexts"] },
-            { score: 6, retentionScore: 3, grammarScore: 3, feedback: "Lacks core teamwork criteria. No details surrounding trust.", improvements: ["Add team common goals definition"] }
-          ],
-          emailAnalysis: { score: 11, relevanceScore: 3, toneScore: 3, vocabularyScore: 2, structureScore: 3, feedback: "Lacks core structure. Signature layout is incomplete. The email was excessively brief and missed the coordination requirements.", improvements: ["Include coordinate registration details", "Ensure correct signature spacing"] }
-        },
-        {
-          id: "STU-2026-941",
-          studentName: "Pragya Singh",
-          studentId: "CSE-2025-1941",
-          testId: 1,
-          testTitle: "TCS Verbal Ability Practice – Set 1",
-          date: "12 Jun 2026",
-          sentenceScore: 19,
-          passageScore: 36,
-          emailScore: 18,
-          totalScore: 73,
-          percentage: 91.25,
-          grade: "Distinction",
-          sentenceAnswers: {},
-          sentenceGrading: [],
-          passageAnalysis: [
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Virtually flawless recall. Transcribed cloud servers seamlessly.", improvements: [] },
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Detailed descriptions of training metrics. Very high clarity.", improvements: [] },
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Excellent comparison of fossil fuels with wind energy.", improvements: [] },
-            { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Exceptional representation of team goals, trust and support.", improvements: [] }
-          ],
-          emailAnalysis: { score: 18, relevanceScore: 5, toneScore: 5, vocabularyScore: 4, structureScore: 4, feedback: "Exceptional vocabulary choice. Highly respectful tone throughout the email. The request for certificate of completion is clear and well-calibrated.", improvements: ["Add date of completion explicitly for administrative ease"] }
+    // 1. Listen for submissions
+    const unsubSubmissions = onSnapshot(collection(db, 'submissions'), (snapshot) => {
+      const list: SubmissionRecord[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as SubmissionRecord);
+      });
+
+      if (list.length === 0) {
+        // Default high-fidelity cohort mock datasets for beautiful calculations and peers comparison
+        const initialCohorts: SubmissionRecord[] = [
+          {
+            id: "STU-2026-042",
+            studentName: "Aniket Sharma",
+            studentId: "CSE-2025-1042",
+            testId: 1,
+            testTitle: "TCS Verbal Ability Practice – Set 1",
+            date: "11 Jun 2026",
+            sentenceScore: 16,
+            passageScore: 28,
+            emailScore: 14,
+            totalScore: 58,
+            percentage: 72.5,
+            grade: "First Class",
+            sentenceAnswers: {},
+            sentenceGrading: [],
+            passageAnalysis: [
+              { score: 7, retentionScore: 4, grammarScore: 3, feedback: "Great effort in capturing the business flexibility benefit.", improvements: ["Incorporate secure remote elements"] },
+              { score: 8, retentionScore: 5, grammarScore: 3, feedback: "Captured confidence and interpersonal values correctly.", improvements: ["Add worker retention details"] },
+              { score: 6, retentionScore: 3, grammarScore: 3, feedback: "Understood solar and wind energy naturally.", improvements: ["Discuss long-term energy security"] },
+              { score: 7, retentionScore: 4, grammarScore: 3, feedback: "Highlights mutual trust is essential context.", improvements: ["State innovative problem solving concepts"] }
+            ],
+            emailAnalysis: { score: 14, relevanceScore: 4, toneScore: 3, vocabularyScore: 4, structureScore: 3, feedback: "Formally sound structure with standard greetings. Add registration numbers clearly for maximum compliance in candidate tracking.", improvements: ["Incorporate detailed roll numbers", "Avoid contractions like 'can't'"] }
+          },
+          {
+            id: "STU-2026-105",
+            studentName: "Ananya Rao",
+            studentId: "CSE-2025-1105",
+            testId: 1,
+            testTitle: "TCS Verbal Ability Practice – Set 1",
+            date: "12 Jun 2026",
+            sentenceScore: 18,
+            passageScore: 34,
+            emailScore: 17,
+            totalScore: 69,
+            percentage: 86.25,
+            grade: "Distinction",
+            sentenceAnswers: {},
+            sentenceGrading: [],
+            passageAnalysis: [
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Excellent keyword precision. Outlined secure online platforms.", improvements: [] },
+              { score: 8, retentionScore: 5, grammarScore: 3, feedback: "Strong focus on worker training benefits.", improvements: ["Integrate retention rates"] },
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Outstanding focus on eco balance and low pollution.", improvements: [] },
+              { score: 8, retentionScore: 4, grammarScore: 4, feedback: "Solid context on trust and shared collaboration.", improvements: [] }
+            ],
+            emailAnalysis: { score: 17, relevanceScore: 5, toneScore: 4, vocabularyScore: 4, structureScore: 4, feedback: "Highly precise. Perfectly formatted subject. Addressed the coordinator using professional honorifics and provided clear context.", improvements: ["Vary standard transitions for smoother sentence rhythm"] }
+          },
+          {
+            id: "STU-2026-302",
+            studentName: "Karthik Subramanian",
+            studentId: "CSE-2025-1302",
+            testId: 1,
+            testTitle: "TCS Verbal Ability Practice – Set 1",
+            date: "12 Jun 2026",
+            sentenceScore: 11,
+            passageScore: 22,
+            emailScore: 11,
+            totalScore: 44,
+            percentage: 55.0,
+            grade: "Second Class",
+            sentenceAnswers: {},
+            sentenceGrading: [],
+            passageAnalysis: [
+              { score: 5, retentionScore: 3, grammarScore: 2, feedback: "Grammatically correct but extremely brief recall.", improvements: ["Include company cost reduction"] },
+              { score: 6, retentionScore: 4, grammarScore: 2, feedback: "Understood skill building benefits. Omitted key stats.", improvements: ["Explain organizational motivation results"] },
+              { score: 5, retentionScore: 3, grammarScore: 2, feedback: "Partially represented solar and environmental balance.", improvements: ["State fossil fuels alternative contexts"] },
+              { score: 6, retentionScore: 3, grammarScore: 3, feedback: "Lacks core teamwork criteria. No details surrounding trust.", improvements: ["Add team common goals definition"] }
+            ],
+            emailAnalysis: { score: 11, relevanceScore: 3, toneScore: 3, vocabularyScore: 2, structureScore: 3, feedback: "Lacks core structure. Signature layout is incomplete. The email was excessively brief and missed the coordination requirements.", improvements: ["Include coordinate registration details", "Ensure correct signature spacing"] }
+          },
+          {
+            id: "STU-2026-941",
+            studentName: "Pragya Singh",
+            studentId: "CSE-2025-1941",
+            testId: 1,
+            testTitle: "TCS Verbal Ability Practice – Set 1",
+            date: "12 Jun 2026",
+            sentenceScore: 19,
+            passageScore: 36,
+            emailScore: 18,
+            totalScore: 73,
+            percentage: 91.25,
+            grade: "Distinction",
+            sentenceAnswers: {},
+            sentenceGrading: [],
+            passageAnalysis: [
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Virtually flawless recall. Transcribed cloud servers seamlessly.", improvements: [] },
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Detailed descriptions of training metrics. Very high clarity.", improvements: [] },
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Excellent comparison of fossil fuels with wind energy.", improvements: [] },
+              { score: 9, retentionScore: 5, grammarScore: 4, feedback: "Exceptional representation of team goals, trust and support.", improvements: [] }
+            ],
+            emailAnalysis: { score: 18, relevanceScore: 5, toneScore: 5, vocabularyScore: 4, structureScore: 4, feedback: "Exceptional vocabulary choice. Highly respectful tone throughout the email. The request for certificate of completion is clear and well-calibrated.", improvements: ["Add date of completion explicitly for administrative ease"] }
+          }
+        ];
+        initialCohorts.forEach(async (cohort) => {
+          try {
+            await setDoc(doc(db, 'submissions', cohort.id), cohort);
+          } catch (e) {
+            console.error("Failed to seed initial submission:", e);
+          }
+        });
+        setAllSubmissions(initialCohorts);
+      } else {
+        // Sort with newest first
+        list.sort((a, b) => b.id.localeCompare(a.id));
+        setAllSubmissions(list);
+        localStorage.setItem('intellitest_submissions', JSON.stringify(list));
+      }
+    }, (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'submissions');
+      } catch (err) {
+        console.error("Firestore sync error:", err);
+      }
+    });
+
+    // 2. Listen for blocked students
+    const unsubBlocked = onSnapshot(collection(db, 'blocked_students'), (snapshot) => {
+      const blockedList: string[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data && data.blocked) {
+          blockedList.push(data.studentId);
         }
-      ];
-      localStorage.setItem('intellitest_submissions', JSON.stringify(initialCohorts));
-      setAllSubmissions(initialCohorts);
-    }
+      });
+      setBlockedStudents(blockedList);
+      localStorage.setItem('intellitest_blocked_students', JSON.stringify(blockedList));
+    }, (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'blocked_students');
+      } catch (err) {
+        console.error("Firestore sync error:", err);
+      }
+    });
+
+    return () => {
+      unsubSubmissions();
+      unsubBlocked();
+    };
   }, []);
 
-  // Sync to local database handler
-  const saveSubmissions = (updated: SubmissionRecord[]) => {
+  // Sync to local & cloud database handler
+  const saveSubmissions = async (updated: SubmissionRecord[]) => {
     setAllSubmissions(updated);
     localStorage.setItem('intellitest_submissions', JSON.stringify(updated));
+    // Core writes and synchronization to Firestore
+    for (const record of updated) {
+      try {
+        await setDoc(doc(db, 'submissions', record.id), record);
+      } catch (error) {
+        console.error("Failed to write submission inside loop:", error);
+      }
+    }
   };
 
   // Timer side effects
@@ -463,7 +557,13 @@ export default function App() {
   // Trigger test initialization
   const startExam = (test: PracticeTest) => {
     if (!studentName.trim() || !studentId.trim()) {
-      alert("Please enter both Candidate Name and Student ID credentials in the panel first.");
+      const credsPanel = document.getElementById('student-credentials-panel');
+      if (credsPanel) {
+        credsPanel.scrollIntoView({ behavior: 'smooth' });
+        credsPanel.classList.add('ring-2', 'ring-amber-500');
+        setTimeout(() => credsPanel.classList.remove('ring-2', 'ring-amber-500'), 2500);
+      }
+      alert("Registration Required: Please enter both Candidate Name and Student ID in the Candidate Identification Ledger first.");
       return;
     }
 
@@ -743,6 +843,8 @@ export default function App() {
         },
         sentenceAnswers: sentenceInputs,
         sentenceGrading: sentenceGradingResult,
+        passageAnswers: passageInputs,
+        emailAnswer: emailInput,
         keyVerbalStrengths: overallSummary.keyVerbalStrengths,
         criticalImprovements: overallSummary.criticalImprovements,
         customActionableTip: overallSummary.customActionableTip
@@ -778,6 +880,8 @@ export default function App() {
         testTitle: activeTest!.title,
         date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
         ...computed,
+        passageAnswers: passageInputs,
+        emailAnswer: emailInput,
         keyVerbalStrengths: "Demonstrates consistent response completion speeds. Displays accurate knowledge of sentence structure syntax checks.",
         criticalImprovements: "Enhance detailed recall keywords storage and build transitional email signatures explicitly.",
         customActionableTip: "Practice transcribing passages with core dates, metrics, and technical keywords immediately."
@@ -829,16 +933,32 @@ export default function App() {
   };
 
   // Delete submission handler
-  const deleteSubmission = (idToDelete: string) => {
+  const deleteSubmission = async (idToDelete: string) => {
     if (window.confirm("Verify: Are you sure you want to de-register this feedback row?")) {
       const filtered = allSubmissions.filter((sub) => sub.id !== idToDelete);
-      saveSubmissions(filtered);
+      setAllSubmissions(filtered);
+      localStorage.setItem('intellitest_submissions', JSON.stringify(filtered));
+
+      try {
+        await deleteDoc(doc(db, 'submissions', idToDelete));
+      } catch (error) {
+        console.error("Failed to delete submission from Firestore:", error);
+        try {
+          handleFirestoreError(error, OperationType.DELETE, `submissions/${idToDelete}`);
+        } catch (e) {}
+      }
     }
   };
 
   // Reset core data to presets
-  const handleResetData = () => {
+  const handleResetData = async () => {
     if (window.confirm("Restore presets: Are you sure you want to restore high-contrast default seed cohorts?")) {
+      // Clear Firestore submissions so that the blank listener re-seeds them
+      for (const sub of allSubmissions) {
+        try {
+          await deleteDoc(doc(db, 'submissions', sub.id));
+        } catch (e) {}
+      }
       localStorage.removeItem('intellitest_submissions');
       window.location.reload();
     }
@@ -868,11 +988,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg md:text-xl font-display font-bold tracking-tight text-white">
-                  TCS Verbal Platform
+                  IntelliTest Verbal Platform
                 </h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">By Praveen </span>
+                <span className="px-2.5 py-0.5 bg-indigo-500/15 text-indigo-300 text-[9px] uppercase font-bold rounded-full border border-indigo-500/30 tracking-wider">TCS NQT STAGE</span>
               </div>
-              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator for TCS</p>
+              <p className="text-[11px] text-slate-400 tracking-wide font-sans mt-0.5">Automated Verbal Comprehension Benchmarking Simulator</p>
             </div>
           </div>
 
@@ -1025,10 +1145,23 @@ export default function App() {
                             <button
                               id={`btn-start-test-${test.id}`}
                               onClick={() => startExam(test)}
-                              className="w-full md:w-auto px-4.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-lg tracking-wide shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              className={`w-full md:w-auto px-4.5 py-2.5 text-xs font-bold rounded-lg tracking-wide shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                (!studentName.trim() || !studentId.trim())
+                                  ? 'bg-[#12162f] border border-amber-500/30 hover:border-amber-500/50 text-amber-300'
+                                  : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95'
+                              }`}
                             >
-                              <Play className="w-3 h-3 fill-white" />
-                              Begin Assessment
+                              {(!studentName.trim() || !studentId.trim()) ? (
+                                <>
+                                  <Lock className="w-3 h-3 text-amber-400" />
+                                  Register ID &amp; Name First
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3 h-3 fill-white" />
+                                  Begin Assessment
+                                </>
+                              )}
                             </button>
                           )}
                         </div>
@@ -1092,7 +1225,7 @@ export default function App() {
                 <div className="w-10 h-10 bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full flex items-center justify-center mx-auto mb-2.5">
                   <Award size={18} />
                 </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6366f1] mb-1">Developer by</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6366f1] mb-1">Architect & Developer Spotlight</p>
                 <h3 className="text-xl font-display font-bold text-white mb-0.5">Praveen</h3>
                 <p className="text-xs text-slate-400">MTech Computer Science &amp; Engineering</p>
                 <p className="text-[11px] text-indigo-300 font-serif italic mt-2">"Benchmarking system timings for highest verbal performance"</p>
@@ -1538,80 +1671,289 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* High Quality Accordion-Styled Multi-Agent Feedback Logs */}
+                                    {/* High Quality Accordion-Styled Multi-Agent Feedback Logs */}
                   <div className="space-y-3.5 pt-1.5">
                     <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-widest font-display">Detailed Evaluator Insights</h3>
                     
-                    {/* Log block 1 */}
-                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner">
+                    {/* Log block 0: Sentence Completion Blanks Review */}
+                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner font-sans">
                       <button 
-                        onClick={() => setActiveAccordionIndex(0)}
+                        onClick={() => setActiveAccordionIndex(3)}
                         className="w-full px-5 py-3.5 bg-[#0b0e22] hover:bg-[#111533] transition-all flex justify-between items-center text-xs font-bold uppercase tracking-widest text-slate-200 border-b border-[#1b2247]"
                       >
-                        <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-indigo-400" /> 01. Professional Email Review</span>
-                        <span className="text-[10px] font-mono text-indigo-400 font-bold">{currentSubmission.emailScore} marks</span>
+                        <span className="flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" /> 01. Sentence Completion Answers Key</span>
+                        <span className="text-[10px] font-mono text-indigo-400 font-bold">{currentSubmission.sentenceScore} / 20 correct</span>
                       </button>
                       
-                      {activeAccordionIndex === 0 && (
-                        <div className="p-5 text-xs text-slate-400 space-y-3 leading-relaxed">
-                          <p className="text-slate-200 italic font-mono bg-[#0a0c1a] p-3 rounded-lg border border-[#1c234a]">
-                            "{currentSubmission.emailAnalysis.feedback}"
-                          </p>
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Prescribed improvements for document:</span>
-                            <ul className="space-y-1">
-                              {currentSubmission.emailAnalysis.improvements.map((imp, idx) => (
-                                <li key={idx} className="flex items-start gap-1.5">
-                                  <span className="w-1.5 h-1.5 bg-[#f43f5e] rounded-full mt-1.5 shrink-0"></span>
-                                  <span>{imp}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                      {activeAccordionIndex === 3 && (
+                        <div className="p-5 text-xs text-slate-400 space-y-4 max-h-[500px] overflow-y-auto divide-y divide-[#1b2247]/40 leading-relaxed font-sans">
+                          {(() => {
+                            const matchedTest = PRACTICE_TESTS.find(t => t.id === currentSubmission.testId) || PRACTICE_TESTS[0];
+                            return matchedTest.sentenceCompletion.map((q, idx) => {
+                              const studentInputRaw = currentSubmission.sentenceAnswers?.[idx];
+                              const studentInput = (studentInputRaw || '').trim();
+                              const studentInputLower = studentInput.toLowerCase();
+                              const acceptedList = q.acceptedAnswers;
+                              const isCorrect = currentSubmission.sentenceGrading?.[idx] ?? acceptedList.includes(studentInputLower);
+                              
+                              return (
+                                <div key={idx} className={`pt-4 ${idx === 0 ? 'pt-0' : ''} flex flex-col gap-2`}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <span className="font-mono text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 mt-0.5">
+                                      Blank {idx + 1}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold border shrink-0 ${
+                                      isCorrect 
+                                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' 
+                                        : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
+                                    }`}>
+                                      {isCorrect ? 'Correct Matching' : 'Incorrect / Unmatched'}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-slate-200 font-medium text-sm leading-relaxed">
+                                    {(() => {
+                                      const parts = q.sentence.split("________");
+                                      return (
+                                        <span>
+                                          {parts[0]}
+                                          <span className={`px-2 py-0.5 rounded mx-1 font-mono font-bold border ${
+                                            isCorrect 
+                                              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                                              : 'bg-rose-500/10 text-rose-300 border-rose-500/30 line-through'
+                                          }`}>
+                                            {studentInput || "________ [Skipped]"}
+                                          </span>
+                                          {parts[1]}
+                                        </span>
+                                      );
+                                    })()}
+                                  </p>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1 bg-[#080b1e]/50 border border-[#141b3d]/70 p-3 rounded-lg text-slate-400 text-xs shadow-inner">
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Candidate response:</span>
+                                      <p className={`font-mono text-xs font-bold ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {studentInputRaw ? `"${studentInputRaw}"` : "❌ No Entry Detected"}
+                                      </p>
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Accepted Key Vocabulary:</span>
+                                      <p className="font-mono text-xs text-indigo-300 font-semibold leading-relaxed">
+                                        {acceptedList.join(', ')}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-[#05060d] border border-[#1b2247]/50 rounded-lg p-2.5 text-[11px] text-slate-400 flex gap-2 items-start shadow-inner mt-1">
+                                    <span className="text-amber-400 shrink-0 mt-0.5">💡</span>
+                                    <div>
+                                      <span className="font-bold text-slate-300 mr-1">Correction Summary:</span>
+                                      {isCorrect ? (
+                                        <span>Excellent match! Your vocabulary choice perfectly fits the sentence semantics and matches expected TCS evaluation parameters.</span>
+                                      ) : (
+                                        <span>
+                                          The word <span className="font-mono text-slate-300">"{studentInput || 'skipped'}"</span> is incorrect or grammatically suboptimal here. This context demands: {(() => {
+                                            const wordTypes = {
+                                              "proactive": "an adjective describing prompt, positive actions taken before a problem arises.",
+                                              "submit": "an infinitive verb indicating completion or hand-in of tasks.",
+                                              "disrupted": "a past participle verb / adjective representing a sudden halt or severe rain interference.",
+                                              "evidence": "a noun representing clear indicators or research proofs.",
+                                              "expand": "an infinitive verb for growth/scaling in commercial operations.",
+                                              "inspiring": "an adjective depicting capturing positive, captive attention.",
+                                              "complete": "a verb specifying fulfilling projects in prescribed duration.",
+                                              "automate": "an infinitive verb for streamlining/simplifying repetitive actions.",
+                                              "calm": "a cooling adjective for focus and tranquility under exam load.",
+                                              "shortage": "a noun showing a lack/deficit of product inventory.",
+                                              "follow": "a verb specifying loyalty or compliance with guidelines.",
+                                              "stamina": "a noun showing robust endurance or competition spirit.",
+                                              "improvement": "a noun describing growth, revision, or corrective attention.",
+                                              "diversity": "a noun signifying harmony and inclusion in teams.",
+                                              "inspected": "a past tense verb representing careful scrutiny check.",
+                                              "unforeseen": "an adjective representing unexpected variables in schedule.",
+                                              "prevent": "a transitive verb representing avoiding or resolving conflicts.",
+                                              "vast": "an adjective describing rich, expansive collections.",
+                                              "outstanding": "an adjective showing exemplary or high-contrast results.",
+                                              "satisfaction": "a noun representation of positive user happiness feedback."
+                                            };
+                                            const keyword = acceptedList[0];
+                                            return wordTypes[keyword as keyof typeof wordTypes] || "an adjective, verb or noun representing an appropriate word matching the grammatical word class and semantics of the sentence frame.";
+                                          })()}{" "}
+                                          Ensure correct spelling, word class, and tense on your next mock evaluation!
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
                         </div>
                       )}
                     </div>
 
-                    {/* Log block 2 */}
-                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner">
+                    {/* Log block 1: Professional Email Review */}
+                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner font-sans">
+                      <button 
+                        onClick={() => setActiveAccordionIndex(0)}
+                        className="w-full px-5 py-3.5 bg-[#0b0e22] hover:bg-[#111533] transition-all flex justify-between items-center text-xs font-bold uppercase tracking-widest text-slate-200 border-b border-[#1b2247]"
+                      >
+                        <span className="flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-indigo-400" /> 02. Professional Email Review</span>
+                        <span className="text-[10px] font-mono text-indigo-400 font-bold">{currentSubmission.emailScore} marks</span>
+                      </button>
+                      
+                      {activeAccordionIndex === 0 && (
+                        <div className="p-5 text-xs text-slate-400 space-y-4 max-h-[500px] overflow-y-auto leading-relaxed">
+                          {(() => {
+                            const matchedTest = PRACTICE_TESTS.find(t => t.id === currentSubmission.testId) || PRACTICE_TESTS[0];
+                            const emailSituation = matchedTest.emailWriting.situation;
+                            const emailTask = matchedTest.emailWriting.task;
+                            const studentEmail = currentSubmission.emailAnswer || "";
+                            
+                            return (
+                              <div className="space-y-4">
+                                <div className="bg-[#0b0e22]/60 border border-[#1b2247]/50 p-4 rounded-xl space-y-3">
+                                  <div className="border-b border-[#1b2247]/40 pb-2">
+                                    <span className="text-xs font-bold uppercase tracking-widest text-[#6366f1] block">Assigned Email Writing Scenario:</span>
+                                    <p className="text-slate-200 text-xs mt-1 font-medium">{emailSituation}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Required Tasks:</span>
+                                    <p className="text-slate-300 text-xs mt-1 leading-relaxed">{emailTask}</p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">Your Composed Mail:</span>
+                                  <div className="bg-[#05060d] border border-[#1e254d] p-4 rounded-xl text-slate-200 text-xs font-mono leading-relaxed whitespace-pre-wrap select-text">
+                                    {studentEmail ? studentEmail : "❌ No text response was committed for the business email portion."}
+                                  </div>
+                                </div>
+
+                                <div className="bg-[#07091a] border border-[#1c234a] p-4 rounded-xl space-y-3 shadow-inner">
+                                  <div className="flex justify-between items-center border-b border-[#1b2247]/40 pb-2">
+                                    <span className="text-[10px] uppercase font-bold text-emerald-400 font-display tracking-widest">Grading Evaluator Feedback:</span>
+                                    <span className="text-[#10b981] font-mono font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">{currentSubmission.emailAnalysis.score}/20 marks</span>
+                                  </div>
+
+                                  <p className="italic text-slate-300 bg-[#04050d] p-3 rounded border border-[#151a3d] leading-relaxed">
+                                    "{currentSubmission.emailAnalysis.feedback}"
+                                  </p>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                    <div className="bg-[#05060d] border border-[#141a36]/80 p-2.5 rounded-lg text-center">
+                                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider">Relevance</span>
+                                      <span className="font-mono text-indigo-400 font-bold text-xs">{currentSubmission.emailAnalysis.relevanceScore}/5</span>
+                                    </div>
+                                    <div className="bg-[#05060d] border border-[#141a36]/80 p-2.5 rounded-lg text-center">
+                                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider">Tone</span>
+                                      <span className="font-mono text-indigo-400 font-bold text-xs">{currentSubmission.emailAnalysis.toneScore}/5</span>
+                                    </div>
+                                    <div className="bg-[#05060d] border border-[#141a36]/80 p-2.5 rounded-lg text-center">
+                                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider">Vocabulary</span>
+                                      <span className="font-mono text-indigo-400 font-bold text-xs">{currentSubmission.emailAnalysis.vocabularyScore}/5</span>
+                                    </div>
+                                    <div className="bg-[#05060d] border border-[#141a36]/80 p-2.5 rounded-lg text-center">
+                                      <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wider">Structure</span>
+                                      <span className="font-mono text-indigo-400 font-bold text-xs">{currentSubmission.emailAnalysis.structureScore}/5</span>
+                                    </div>
+                                  </div>
+
+                                  {currentSubmission.emailAnalysis.improvements && currentSubmission.emailAnalysis.improvements.length > 0 && (
+                                    <div className="space-y-1.5 pt-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Prescribed improvements for document:</span>
+                                      <ul className="space-y-1 pl-1">
+                                        {currentSubmission.emailAnalysis.improvements.map((imp, idx) => (
+                                          <li key={idx} className="flex items-start gap-1.5 text-xs text-slate-400">
+                                            <span className="w-1.5 h-1.5 bg-[#f43f5e] rounded-full mt-1.5 shrink-0"></span>
+                                            <span>{imp}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Log block 2: Recall Paragraph analyses */}
+                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner font-sans">
                       <button 
                         onClick={() => setActiveAccordionIndex(1)}
                         className="w-full px-5 py-3.5 bg-[#0b0e22] hover:bg-[#111533] transition-all flex justify-between items-center text-xs font-bold uppercase tracking-widest text-slate-200 border-b border-[#1b2247]"
                       >
-                        <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5 text-indigo-400" /> 02. Recall Paragraph analyses</span>
+                        <span className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5 text-indigo-400" /> 03. Recall Paragraph analyses</span>
                         <span className="text-[10px] font-mono text-indigo-400 font-bold">{currentSubmission.passageScore} marks</span>
                       </button>
                       
                       {activeAccordionIndex === 1 && (
-                        <div className="p-5 text-xs text-slate-400 space-y-4 leading-relaxed">
-                          {currentSubmission.passageAnalysis.map((p, idx) => (
-                            <div key={idx} className="bg-[#0b0e22] border border-[#1b2247]/60 p-3.5 rounded-lg">
-                              <div className="flex justify-between items-center font-bold text-slate-300 mb-1.5">
-                                <span className="uppercase tracking-wider">Comprehension Recall {idx+1}</span>
-                                <span className="text-[#10b981] font-mono">{p.score}/10</span>
-                              </div>
-                              <p className="italic text-slate-400">"{p.feedback}"</p>
-                              {p.improvements && p.improvements.length > 0 && (
-                                <div className="mt-2 text-slate-500 font-medium">
-                                  <span className="text-[#f43f5e] font-bold uppercase text-[9px] mr-1.5">Target improve:</span>
-                                  {p.improvements.join('; ')}
+                        <div className="p-5 text-xs text-slate-400 space-y-4 max-h-[500px] overflow-y-auto leading-relaxed">
+                          {(() => {
+                            const matchedTest = PRACTICE_TESTS.find(t => t.id === currentSubmission.testId) || PRACTICE_TESTS[0];
+                            return currentSubmission.passageAnalysis.map((p, idx) => {
+                              const originalPassage = matchedTest.passageRecall[idx]?.passage || "";
+                              const originalTitle = matchedTest.passageRecall[idx]?.title || `Passage Recall ${idx+1}`;
+                              const studentRecall = currentSubmission.passageAnswers?.[idx] || "";
+                              
+                              return (
+                                <div key={idx} className="bg-[#0b0e22] border border-[#1b2247]/60 p-4 rounded-xl flex flex-col gap-3">
+                                  <div className="flex justify-between items-center border-b border-[#1b2247]/40 pb-2">
+                                    <span className="font-semibold text-slate-200 uppercase tracking-wider">{originalTitle}</span>
+                                    <span className="text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-mono text-xs font-bold">{p.score}/10 marks</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                      <span className="text-[10px] uppercase font-bold text-[#6366f1] tracking-wider block">Original Standard Reference:</span>
+                                      <div className="bg-[#05060d] border border-[#141a36] p-3 rounded-lg text-slate-300 text-xs min-h-[90px] leading-relaxed select-text">
+                                        {originalPassage}
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">Your Transcoped Recall:</span>
+                                      <div className="bg-[#05060d] border border-[#141a36] p-3 rounded-lg text-amber-200 text-xs min-h-[90px] leading-relaxed italic select-text">
+                                        {studentRecall ? `"${studentRecall}"` : "❌ No response recorded for this recall block."}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-[#060818] border border-[#1c234a] p-3 rounded-lg text-xs mt-1 space-y-2">
+                                    <div>
+                                      <span className="text-emerald-400 font-bold uppercase text-[9px] block">Evaluation Feedback:</span>
+                                      <p className="text-slate-300 leading-relaxed italic">"{p.feedback}"</p>
+                                    </div>
+                                    {p.improvements && p.improvements.length > 0 && (
+                                      <div>
+                                        <span className="text-[#f43f5e] font-bold uppercase text-[9px] block">Areas for semantic improvement:</span>
+                                        <ul className="list-disc pl-4 text-slate-400 mt-1 space-y-0.5 font-sans">
+                                          {p.improvements.map((imp, i) => (
+                                            <li key={i}>{imp}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                              );
+                            });
+                          })()}
                         </div>
                       )}
                     </div>
 
                     {/* Log block 3 */}
-                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner">
+                    <div className="border border-[#1b2247] bg-[#05060d] rounded-xl overflow-hidden shadow-inner font-sans">
                       <button 
                         onClick={() => setActiveAccordionIndex(2)}
                         className="w-full px-5 py-3.5 bg-[#0b0e22] hover:bg-[#111533] transition-all flex justify-between items-center text-xs font-bold uppercase tracking-widest text-slate-200 border-b border-[#1b2247]"
                       >
-                        <span className="flex items-center gap-2"><Award className="w-3.5 h-3.5 text-indigo-400" /> 03. Global actionable advisory</span>
+                        <span className="flex items-center gap-2"><Award className="w-3.5 h-3.5 text-indigo-400" /> 04. Global actionable advisory</span>
                         <span className="text-[10px] font-mono text-[#10b981] font-bold">Consolidated</span>
                       </button>
                       
@@ -1627,13 +1969,13 @@ export default function App() {
                           </div>
                           <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-200 rounded-lg">
                             <span className="font-semibold uppercase tracking-wider text-[10px] block">Actionable Calibration Advisory:</span>
-                            <p className="mt-1">{currentSubmission.customActionableTip || "Read standard comprehension passages daily for 30s intervals, then immediately jot down semantic landmarks."}</p>
+                            <p className="mt-1">{currentSubmission.customActionableTip || "Read standard comprehension passages daily for 30s intervals, then immediately jolt down semantic landmarks."}</p>
                           </div>
                         </div>
                       )}
                     </div>
 
-                  </div>
+                  </div>  </div>
 
                 </div>
 
