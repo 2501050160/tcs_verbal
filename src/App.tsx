@@ -163,7 +163,7 @@ export default function App() {
   
   // UI Interactive States
   const [revealInstructionId, setRevealInstructionId] = useState<boolean>(false);
-  const [activeAccordionIndex, setActiveAccordionIndex] = useState<number>(0);
+  const [activeAccordionIndex, setActiveAccordionIndex] = useState<number>(3);
   
   // AI Evaluations / Scoring results
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
@@ -1091,7 +1091,7 @@ export default function App() {
                     <Award className="w-4 h-4 text-indigo-400" />
                     <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-widest font-display">Verbal Evaluation Practice Catalogs</h3>
                   </div>
-                  <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 px-2 py-0.5 text-xs rounded-full font-mono font-bold">5 sets ready</span>
+                  <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 px-2 py-0.5 text-xs rounded-full font-mono font-bold">{PRACTICE_TESTS.length} sets ready</span>
                 </div>
 
                 <div className="space-y-3.5 overflow-y-auto max-h-[480px] pr-1">
@@ -1353,6 +1353,11 @@ export default function App() {
                   <button
                     id="btn-confirm-start-exam"
                     onClick={() => {
+                      if (!studentName.trim() || !studentId.trim()) {
+                        alert("Access Denied: Please enter your both Candidate Name and Student ID/Roll Number first.");
+                        setCurrentView('landing');
+                        return;
+                      }
                       setCurrentSection('sentence');
                       setGlobalTimer(sentenceTimeLimit);
                       enterFullScreen();
@@ -1686,108 +1691,148 @@ export default function App() {
                       </button>
                       
                       {activeAccordionIndex === 3 && (
-                        <div className="p-5 text-xs text-slate-400 space-y-4 max-h-[500px] overflow-y-auto divide-y divide-[#1b2247]/40 leading-relaxed font-sans">
+                        <div className="p-5 text-xs text-slate-400 space-y-4 max-h-[500px] overflow-y-auto leading-relaxed font-sans">
                           {(() => {
                             const matchedTest = PRACTICE_TESTS.find(t => t.id === currentSubmission.testId) || PRACTICE_TESTS[0];
-                            return matchedTest.sentenceCompletion.map((q, idx) => {
-                              const studentInputRaw = currentSubmission.sentenceAnswers?.[idx];
-                              const studentInput = (studentInputRaw || '').trim();
-                              const studentInputLower = studentInput.toLowerCase();
-                              const acceptedList = q.acceptedAnswers;
-                              const isCorrect = currentSubmission.sentenceGrading?.[idx] ?? acceptedList.includes(studentInputLower);
-                              
-                              return (
-                                <div key={idx} className={`pt-4 ${idx === 0 ? 'pt-0' : ''} flex flex-col gap-2`}>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <span className="font-mono text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 mt-0.5">
-                                      Blank {idx + 1}
-                                    </span>
-                                    <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold border shrink-0 ${
-                                      isCorrect 
-                                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' 
-                                        : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
-                                    }`}>
-                                      {isCorrect ? 'Correct Matching' : 'Incorrect / Unmatched'}
-                                    </span>
+                            const incorrectList = (currentSubmission.sentenceGrading || []).map((isCorr, i) => !isCorr ? i + 1 : null).filter((v): v is number => v !== null);
+                            
+                            return (
+                              <div className="space-y-4">
+                                <div className="bg-[#0b122e]/80 border border-indigo-500/20 p-4.5 rounded-xl space-y-2.5">
+                                  <div className="flex justify-between items-center border-b border-[#1b2247]/50 pb-2">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 font-display">Section 1 Answers Summary Ledger</span>
+                                    <span className="px-2 py-0.5 bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 rounded text-[9px] font-mono leading-none font-bold">CALIBRATION REVIEWS</span>
                                   </div>
-
-                                  <p className="text-slate-200 font-medium text-sm leading-relaxed">
-                                    {(() => {
-                                      const parts = q.sentence.split("________");
-                                      return (
-                                        <span>
-                                          {parts[0]}
-                                          <span className={`px-2 py-0.5 rounded mx-1 font-mono font-bold border ${
-                                            isCorrect 
-                                              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
-                                              : 'bg-rose-500/10 text-rose-300 border-rose-500/30 line-through'
-                                          }`}>
-                                            {studentInput || "________ [Skipped]"}
-                                          </span>
-                                          {parts[1]}
-                                        </span>
-                                      );
-                                    })()}
-                                  </p>
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1 bg-[#080b1e]/50 border border-[#141b3d]/70 p-3 rounded-lg text-slate-400 text-xs shadow-inner">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                                     <div className="space-y-1">
-                                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Candidate response:</span>
-                                      <p className={`font-mono text-xs font-bold ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {studentInputRaw ? `"${studentInputRaw}"` : "❌ No Entry Detected"}
-                                      </p>
+                                      <p className="text-slate-300 font-medium">Evaluation metrics:</p>
+                                      <div className="flex flex-wrap gap-2 pt-0.5">
+                                        <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded font-mono font-bold text-[10px]">{currentSubmission.sentenceScore} correct</span>
+                                        <span className="px-2 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/25 rounded font-mono font-bold text-[10px]">{20 - currentSubmission.sentenceScore} incorrect</span>
+                                      </div>
                                     </div>
-                                    
                                     <div className="space-y-1">
-                                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Accepted Key Vocabulary:</span>
-                                      <p className="font-mono text-xs text-indigo-300 font-semibold leading-relaxed">
-                                        {acceptedList.join(', ')}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="bg-[#05060d] border border-[#1b2247]/50 rounded-lg p-2.5 text-[11px] text-slate-400 flex gap-2 items-start shadow-inner mt-1">
-                                    <span className="text-amber-400 shrink-0 mt-0.5">💡</span>
-                                    <div>
-                                      <span className="font-bold text-slate-300 mr-1">Correction Summary:</span>
-                                      {isCorrect ? (
-                                        <span>Excellent match! Your vocabulary choice perfectly fits the sentence semantics and matches expected TCS evaluation parameters.</span>
+                                      <p className="text-slate-300 font-medium">Items demanding corrective attention:</p>
+                                      {incorrectList.length === 0 ? (
+                                        <p className="text-[#10b981] font-mono text-xs font-bold pt-0.5">✓ Zero errors matched! Flawless lexicon accuracy.</p>
                                       ) : (
-                                        <span>
-                                          The word <span className="font-mono text-slate-300">"{studentInput || 'skipped'}"</span> is incorrect or grammatically suboptimal here. This context demands: {(() => {
-                                            const wordTypes = {
-                                              "proactive": "an adjective describing prompt, positive actions taken before a problem arises.",
-                                              "submit": "an infinitive verb indicating completion or hand-in of tasks.",
-                                              "disrupted": "a past participle verb / adjective representing a sudden halt or severe rain interference.",
-                                              "evidence": "a noun representing clear indicators or research proofs.",
-                                              "expand": "an infinitive verb for growth/scaling in commercial operations.",
-                                              "inspiring": "an adjective depicting capturing positive, captive attention.",
-                                              "complete": "a verb specifying fulfilling projects in prescribed duration.",
-                                              "automate": "an infinitive verb for streamlining/simplifying repetitive actions.",
-                                              "calm": "a cooling adjective for focus and tranquility under exam load.",
-                                              "shortage": "a noun showing a lack/deficit of product inventory.",
-                                              "follow": "a verb specifying loyalty or compliance with guidelines.",
-                                              "stamina": "a noun showing robust endurance or competition spirit.",
-                                              "improvement": "a noun describing growth, revision, or corrective attention.",
-                                              "diversity": "a noun signifying harmony and inclusion in teams.",
-                                              "inspected": "a past tense verb representing careful scrutiny check.",
-                                              "unforeseen": "an adjective representing unexpected variables in schedule.",
-                                              "prevent": "a transitive verb representing avoiding or resolving conflicts.",
-                                              "vast": "an adjective describing rich, expansive collections.",
-                                              "outstanding": "an adjective showing exemplary or high-contrast results.",
-                                              "satisfaction": "a noun representation of positive user happiness feedback."
-                                            };
-                                            const keyword = acceptedList[0];
-                                            return wordTypes[keyword as keyof typeof wordTypes] || "an adjective, verb or noun representing an appropriate word matching the grammatical word class and semantics of the sentence frame.";
-                                          })()}{" "}
-                                          Ensure correct spelling, word class, and tense on your next mock evaluation!
-                                        </span>
+                                        <p className="text-rose-400 font-mono text-xs font-bold pt-0.5 animate-pulse">
+                                          Blanks needing review: {incorrectList.join(', ')}
+                                        </p>
                                       )}
                                     </div>
                                   </div>
+                                  <div className="text-[11px] text-slate-400 leading-relaxed pt-1.5 border-t border-[#1b2247]/30 italic">
+                                    {incorrectList.length === 0 
+                                      ? "Excellent! Every single fill-in-the-blank response is an exact semantic match with the examiner's vocabulary index matrix."
+                                      : `You made errors or skipped ${incorrectList.length} questions. Review the exact corrected responses, explanations, and accepted phrases in the comprehensive list below to check where you went wrong.`
+                                    }
+                                  </div>
                                 </div>
-                              );
-                            });
+                                
+                                <div className="space-y-4 divide-y divide-[#1b2247]/40">
+                                  {matchedTest.sentenceCompletion.map((q, idx) => {
+                                    const studentInputRaw = currentSubmission.sentenceAnswers?.[idx];
+                                    const studentInput = (studentInputRaw || '').trim();
+                                    const studentInputLower = studentInput.toLowerCase();
+                                    const acceptedList = q.acceptedAnswers;
+                                    const isCorrect = currentSubmission.sentenceGrading?.[idx] ?? acceptedList.includes(studentInputLower);
+                                    
+                                    return (
+                                      <div key={idx} className={`pt-4 ${idx === 0 ? 'pt-0' : ''} flex flex-col gap-2`}>
+                                        <div className="flex items-start justify-between gap-3">
+                                          <span className="font-mono text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 mt-0.5">
+                                            Blank {idx + 1}
+                                          </span>
+                                          <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold border shrink-0 ${
+                                            isCorrect 
+                                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' 
+                                              : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
+                                          }`}>
+                                            {isCorrect ? 'Correct Matching' : 'Incorrect / Unmatched'}
+                                          </span>
+                                        </div>
+
+                                        <p className="text-slate-200 font-medium text-sm leading-relaxed">
+                                          {(() => {
+                                            const parts = q.sentence.split("________");
+                                            return (
+                                              <span>
+                                                {parts[0]}
+                                                <span className={`px-2 py-0.5 rounded mx-1 font-mono font-bold border ${
+                                                  isCorrect 
+                                                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                                                    : 'bg-rose-500/10 text-rose-300 border-rose-500/30 line-through'
+                                                }`}>
+                                                  {studentInput || "________ [Skipped]"}
+                                                </span>
+                                                {parts[1]}
+                                              </span>
+                                            );
+                                          })()}
+                                        </p>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1 bg-[#080b1e]/50 border border-[#141b3d]/70 p-3 rounded-lg text-slate-400 text-xs shadow-inner">
+                                          <div className="space-y-1">
+                                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Candidate response:</span>
+                                            <p className={`font-mono text-xs font-bold ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                              {studentInputRaw ? `"${studentInputRaw}"` : "❌ No Entry Detected"}
+                                            </p>
+                                          </div>
+                                          
+                                          <div className="space-y-1">
+                                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Accepted Key Vocabulary:</span>
+                                            <p className="font-mono text-xs text-indigo-300 font-semibold leading-relaxed">
+                                              {acceptedList.join(', ')}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="bg-[#05060d] border border-[#1b2247]/50 rounded-lg p-2.5 text-[11px] text-slate-400 flex gap-2 items-start shadow-inner mt-1">
+                                          <span className="text-amber-400 shrink-0 mt-0.5">💡</span>
+                                          <div>
+                                            <span className="font-bold text-slate-300 mr-1">Correction Summary:</span>
+                                            {isCorrect ? (
+                                              <span>Excellent match! Your vocabulary choice perfectly fits the sentence semantics and matches expected TCS evaluation parameters.</span>
+                                            ) : (
+                                              <span>
+                                                The word <span className="font-mono text-slate-300">"{studentInput || 'skipped'}"</span> is incorrect or grammatically suboptimal here. This context demands: {(() => {
+                                                  const wordTypes = {
+                                                    "proactive": "an adjective describing prompt, positive actions taken before a problem arises.",
+                                                    "submit": "an infinitive verb indicating completion or hand-in of tasks.",
+                                                    "disrupted": "a past participle verb / adjective representing a sudden halt or severe rain interference.",
+                                                    "evidence": "a noun representing clear indicators or research proofs.",
+                                                    "expand": "an infinitive verb for growth/scaling in commercial operations.",
+                                                    "inspiring": "an adjective depicting capturing positive, captive attention.",
+                                                    "complete": "a verb specifying fulfilling projects in prescribed duration.",
+                                                    "automate": "an infinitive verb for streamlining/simplifying repetitive actions.",
+                                                    "calm": "a cooling adjective for focus and tranquility under exam load.",
+                                                    "shortage": "a noun showing a lack/deficit of product inventory.",
+                                                    "follow": "a verb specifying loyalty or compliance with guidelines.",
+                                                    "stamina": "a noun showing robust endurance or competition spirit.",
+                                                    "improvement": "a noun describing growth, revision, or corrective attention.",
+                                                    "diversity": "a noun signifying harmony and inclusion in teams.",
+                                                    "inspected": "a past tense verb representing careful scrutiny check.",
+                                                    "unforeseen": "an adjective representing unexpected variables in schedule.",
+                                                    "prevent": "a transitive verb representing avoiding or resolving conflicts.",
+                                                    "vast": "an adjective describing rich, expansive collections.",
+                                                    "outstanding": "an adjective showing exemplary or high-contrast results.",
+                                                    "satisfaction": "a noun representation of positive user happiness feedback."
+                                                  };
+                                                  const keyword = acceptedList[0];
+                                                  return wordTypes[keyword as keyof typeof wordTypes] || "an adjective, verb or noun representing an appropriate word matching the grammatical word class and semantics of the sentence frame.";
+                                                })()}{" "}
+                                                Ensure correct spelling, word class, and tense on your next mock evaluation!
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
                           })()}
                         </div>
                       )}
